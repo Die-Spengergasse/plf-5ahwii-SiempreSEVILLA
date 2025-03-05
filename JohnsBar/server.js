@@ -1,19 +1,22 @@
-const express = require("./$node_modules/express");
-const bodyParser = require("./$node_modules/body-parser"); // Import body-parser
-const session = require("./$node_modules/express-session"); // Import express-session
-const cookieParser = require("./$node_modules/cookie-parser"); // Import cookie-parser
+require("dotenv").config();
+const fs = require("fs");
+const path = require("path");
+const express = require('express');
+const bodyParser = require("body-parser"); // Import body-parser
+const session = require("express-session"); // Import express-session
+const cookieParser = require("cookie-parser"); // Import cookie-parser
 // npm install prisma --save-dev
 
 // npx prisma init --datasource-provider sqlite
-const { PrismaClient } = require("./$node_modules/@prisma/client/default");
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 
 // Wird für das PW hashing genutzt
 // npm install bcrypt
-const bcrypt = require("./$node_modules/bcrypt/bcrypt");
+const bcrypt = require("bcrypt");
 
-const cors = require("./$node_modules/cors/lib");
-const multer = require("./$node_modules/multer");
+const cors = require("cors");
+const multer = require("multer");
 
 const port = 3000;
 let app = express();
@@ -28,6 +31,17 @@ app.use(session({
     resave: true,
     saveUninitialized: true,
 }));
+
+// this function checks if the user is logged in
+function checkAuth(req, res, next) {
+    if (req.session.user) {
+        // User is logged in, proceed to the next middleware/route handler
+        return next();
+    } else {
+        // User is not logged in, redirect to the login page
+        return res.redirect('/login-signup');
+    }
+}
 
 const upload = multer({
     dest: "uploads/",
@@ -44,8 +58,53 @@ const upload = multer({
     // Hier können Dinge wie akzeptierte Dateiformate eingestellt werden
 });
 
-app.get("/", function (req, res) {
-    res.sendFile("index.html", { root: __dirname });
+app.get('/login-signup', function (req, res) {	
+    res.sendFile("index.html", { root: __dirname });	
+});
+
+app.get("/", checkAuth, function (req, res) {
+    res.redirect("/menu");
+});
+
+app.get("/logout", function (req, res) {
+    req.session.destroy();
+    res.redirect("/login-signup");
+});
+
+app.get("/upload", function (req, res) {
+    res.sendFile("upload.html", { root: __dirname });
+});
+
+// the route for the admin page
+app.get("/add-drink", checkAuth, function (req, res) {
+    if (req.session.user.name === 'admin') {
+        res.sendFile(path.join(__dirname, 'add-drink.html')); // Serve the admin form for adding drinks
+    } else {
+        res.status(403).send("Access denied");
+    }
+});
+
+// the route to handle adding a new drink
+app.post("/add-drink", checkAuth, async function (req, res) {
+    if (req.session.user.name === 'admin') {
+        try {
+            const { name, ml, price, alcohol } = req.body;
+            const drink = await prisma.drink.create({
+                data: {
+                    name: name,
+                    ml: parseInt(ml),
+                    price: parseFloat(price),
+                    alcohol: parseFloat(alcohol),
+                },
+            });
+            res.json(drink);
+        } catch (error) {
+            console.log(error);
+            res.status(500).send(`Drink could not be added: ${error.message}`);
+        }
+    } else {
+        res.status(403).send("Access denied");
+    }
 });
 
 app.get("/test", function (req, res) {
@@ -120,8 +179,14 @@ app.post("/login", async function (req, res) {
         }
         // Generate session and send cookie
         req.session.user = userRecord;
+        if(userRecord.name === "admin") {
+            req.session.isAdmin = true;
+            return res.redirect('/add-drink');
+        } else {
+            req.session.isAdmin = false;
+            return res.redirect('/menu');
+        }
         //res.cookie("sessionId", req.session.id, { httpOnly: true });
-        return res.send(`Login successful, your name: ${userRecord.name}`);
     } catch (error) {
         console.log(error);
         res.status(500).send(`User could not be created ${error.message}`);
@@ -136,7 +201,7 @@ app.post("/menu", async function (req, res) {
     res.send(result);
 });
 
-app.get("/menu", async function (req, res) {
+app.get("/menu", checkAuth, async function (req, res) {
     const drinks = await prisma.drink.findMany();
     res.json(drinks);
 });

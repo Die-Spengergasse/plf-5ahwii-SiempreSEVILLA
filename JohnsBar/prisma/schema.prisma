@@ -34,6 +34,7 @@ model Drink {
     price   Float
     alcohol Float
     orders  DrinkOrder[] @relation("john")
+    imagePath String?
 }
 
 // Model für n:m Beziehung

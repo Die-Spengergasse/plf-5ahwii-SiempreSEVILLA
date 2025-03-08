@@ -20,7 +20,7 @@ const multer = require("multer");
 
 const port = 3000;
 let app = express();
-
+app.use(express.static(path.join(__dirname, "public"))); // Serve static files from the JohnsBar folder
 app.use(express.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(cors());
@@ -59,7 +59,7 @@ const upload = multer({
 });
 
 app.get('/login-signup', function (req, res) {	
-    res.sendFile("index.html", { root: __dirname });	
+    res.sendFile("login-signup.html", { root: __dirname });	
 });
 
 app.get("/", checkAuth, function (req, res) {
